@@ -149,7 +149,7 @@ def get_all_atms_data_rec(st_p, end_p):
                 atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
                 if atm_data is None:
                     return result_file_output(st_p,i, j, k, True)
-                with open("bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
+                with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
                     for x in range(len(atm_data)):
                         atms_data_file.write(atm_data[x])
                         if x != len(atm_data) - 1:
@@ -166,7 +166,7 @@ def result_file_output(st_p,i, j, k, user_blocked):
         j = st_p[2]
     if k < st_p[2]:
         k = st_p[2]
-    with open("punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
+    with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
         if user_blocked:
             output = 'Zablokowano IP. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(st_p[0], st_p[1], st_p[2], i, j,
                                                                                              k)
@@ -239,7 +239,7 @@ while 1:
           'Wpisz "p", aby zaczac od miejsca gdzie skonczono:')
     inp = input()
     if inp == 'p':
-        with open("punkty_kontrolne.txt", 'r') as in_file:
+        with open("../../punkty_kontrolne.txt", 'r') as in_file:
             str_st = in_file.readlines()[-1].split('|')[-4:-1]
             try:
                 st = (int(str_st[0]), int(str_st[1]), int(str_st[2]))
@@ -249,7 +249,6 @@ while 1:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        print(st)
         end = 15 #int(st[0]) + 1
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
