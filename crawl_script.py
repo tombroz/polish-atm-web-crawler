@@ -162,9 +162,9 @@ def get_all_atms_data_rec(st_p, end_p):
 def result_file_output(st_p,i, j, k, user_blocked):
     if i < st_p[0]:
         i = st_p[0]
-    if j < st_p[1]:
-        j = st_p[2]
-    if k < st_p[2]:
+    if j < st_p[1] and i == st_p[0]:
+        j = st_p[1]
+    if k < st_p[2] and i == st_p[0]:
         k = st_p[2]
     with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
         if user_blocked:
@@ -231,7 +231,7 @@ Program pobiera dane dla wojewodztw dopoki nie zostanie zablokowane IP, co jest 
 Wtedy nalezy zmienic IP poza programem. Następnie mozna wpisac "p" co spowoduje kontynuowanie
 pobierania od miejsca przerwania.
     Program zapisuje wyniki w pliku tekstowym "bankomaty_dane.txt" w postaci:
-wojewodztwo	miasto|lokalizacja|wlasciciel|dostepnosc|nr_bankomatu|funkcje_depozytowe|producent
+wojewodztwo|miasto|lokalizacja|wlasciciel|dostepnosc|nr_bankomatu|funkcje_depozytowe|producent
 W pliku "punkty_kontrolne.txt" znajduja sie punkty w ktorych zaczynalo i konczylo sie pobieranie.
 """)
 while 1:
