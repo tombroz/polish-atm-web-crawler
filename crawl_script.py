@@ -2,8 +2,8 @@ import random
 import re
 import time
 import bs4
-import requests
-import winsound
+import tor_ip
+from sounds import sound_notif
 
 base_atm_url = "http://www.karty.pl/bankomaty.php?bankomat="
 base_city_url = "http://www.karty.pl/bankomaty.php?miejscowosc="
@@ -26,18 +26,17 @@ region_urls = (base_region_url + "dolnoslaskie",
                base_region_url + "zachodniopomorskie")
 
 driver_path = "C:/phantomjs-2.1.1-windows/bin/phantomjs"
-notif_dur = 500  # millisecond
-notif_freq_success = 600  # Hz
-notif_freq_fail = int(float(220) / (9.0 / 8.0))  # Hz
-sleep_min = 10
-sleep_max = 20
+sleep_min = 100
+sleep_max = 200
 sleep_coeff = 0.01
+requests_limit = 49
+unique_ips = 20
 
 
 def get_region_cities(region_url):
     region_cities = []
     # prepare html data from url
-    response = requests.get(region_url)
+    response = tor_ip.get_url(region_url)
     html = response.text
     soup = bs4.BeautifulSoup(html, "html.parser")
     if soup.find('title', string="503 Service Unavailable"):
@@ -52,15 +51,11 @@ def get_region_cities(region_url):
 def get_city_atms_numbers(city_url):
     city_atms_numbers = []
     # prepare html data from url
-    response = requests.get(city_url)
+    response = tor_ip.get_url(city_url)
     html = response.text
     soup = bs4.BeautifulSoup(html, "html.parser")
     if soup.find('title', string="503 Service Unavailable"):
         return None
-    # get city atms numbers from url
-    # content = soup.find_all(href=re.compile("bankomat="))
-    # for element in content:
-    #     city_atms_numbers.append(element.get('href')[10:])
     content = soup.find_all('dd')
     for element in content:
         city_atms_numbers.append(element.find('a').get('href')[10:])
@@ -70,7 +65,7 @@ def get_city_atms_numbers(city_url):
 def get_atm_data(atm_url, region_id):
     atm_data = []
     # prepare html data from url
-    response = requests.get(atm_url)
+    response = tor_ip.get_url(atm_url)
     response.encoding = 'utf-8'
     html = response.text
     soup = bs4.BeautifulSoup(html, "html.parser")
@@ -121,8 +116,16 @@ def get_all_atms_data_rec(st_p, end_p):
     :param end_p: region id (from region_urls) to which downloading is continued
     :return: None
     """
+    count = 0
+
+    def check_change_ip(cou, req_limit, uniq_ips):
+        if cou > req_limit:
+            tor_ip.change_ip(uniq_ips)
+
     i, j, k = 0, 0, 0
     for i in range(len(region_urls)):
+        count+=1
+        check_change_ip(count, requests_limit, unique_ips)
         if i < st_p[0]:
             continue
         elif i >= end_p:
@@ -130,25 +133,29 @@ def get_all_atms_data_rec(st_p, end_p):
         print("Pobieranie dla: wojew_{} = {}".format(i, region_urls[i][46:]))
         region_cities = get_region_cities(region_urls[i])
         if region_cities is None:
-            return result_file_output(st_p,i, j, k, True)
+            return result_file_output(st_p, i, j, k, True)
         time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
         for j in range(len(region_cities)):
+            count += 1
+            check_change_ip(count, requests_limit, unique_ips)
             if j < st_p[1] and i == st_p[0]:
                 continue
             print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}"
                   .format(i, region_urls[i][46:], j, region_cities[j]))
             city_atms_numbers = get_city_atms_numbers(base_city_url + region_cities[j])
             if city_atms_numbers is None:
-                return result_file_output(st_p,i, j, k, True)
+                return result_file_output(st_p, i, j, k, True)
             time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
             for k in range(len(city_atms_numbers)):
+                count += 1
+                check_change_ip(count, requests_limit, unique_ips)
                 if k < st_p[2] and j == st_p[1]:
                     continue
                 print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}\t| nr_bankom_{} = {}"
                       .format(i, region_urls[i][46:], j, region_cities[j], k, city_atms_numbers[k]))
                 atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
                 if atm_data is None:
-                    return result_file_output(st_p,i, j, k, True)
+                    return result_file_output(st_p, i, j, k, True)
                 with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
                     for x in range(len(atm_data)):
                         atms_data_file.write(atm_data[x])
@@ -156,10 +163,10 @@ def get_all_atms_data_rec(st_p, end_p):
                             atms_data_file.write("|")
                     atms_data_file.write("\n")
                 time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
-    return result_file_output(st_p,i, j, k, False)
+    return result_file_output(st_p, i, j, k, False)
 
 
-def result_file_output(st_p,i, j, k, user_blocked):
+def result_file_output(st_p, i, j, k, user_blocked):
     if i < st_p[0]:
         i = st_p[0]
     if j < st_p[1] and i == st_p[0]:
@@ -168,35 +175,17 @@ def result_file_output(st_p,i, j, k, user_blocked):
         k = st_p[2]
     with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
         if user_blocked:
-            output = 'Zablokowano IP. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(st_p[0], st_p[1], st_p[2], i, j,
-                                                                                             k)
+            output = 'Zablokowano IP. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
+                st_p[0], st_p[1], st_p[2], i, j,
+                k)
             sound_notif(0)
         else:
-            output = 'Zakonczono pobieranie. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(st_p[0], st_p[1], st_p[2], i,
-                                                                                                j, k)
+            output = 'Zakonczono pobieranie. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
+                st_p[0], st_p[1], st_p[2], i,
+                j, k)
             sound_notif(1)
         result_file.write(output)
         print(output)
-
-
-def gen_sound(freq, dur, wait_after=0.0, count=1):
-    for i in range(count):
-        winsound.Beep(freq, dur)
-        time.sleep(wait_after)
-
-
-def sound_notif(succ):
-    if succ:
-        gen_sound(notif_freq_success, int(float(notif_dur) / 2.0), 0.1, 3)
-    else:
-        notif_freq_fail_low = int(float(notif_freq_fail) / (4.0 / 3.0))
-        notif_freq_fail_high = int(float(notif_freq_fail) * 6.0 / 5.0)
-        short_dur = int(float(notif_dur) / 4.0)
-        medium_dur = int(float(notif_dur) / (4.0 / 3.0))
-        gen_sound(notif_freq_fail, notif_dur, 0.1, 3)
-        gen_sound(notif_freq_fail_low, medium_dur)
-        gen_sound(notif_freq_fail_high, (short_dur))
-        gen_sound(notif_freq_fail, (notif_dur), 0.1)
 
 
 # st = starting region,city, atm. This should be the same as region,city,atm
@@ -249,7 +238,7 @@ while 1:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        end = 15 #int(st[0]) + 1
+        end = 15  # int(st[0]) + 1
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
         except:
