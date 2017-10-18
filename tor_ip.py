@@ -8,7 +8,7 @@ import ipgetter
 import socket
 
 ip_list = []
-check_ip_timeout = 5
+check_ip_timeout = 2
 retry = 100
 code_check_ip_blocked = "Sprawdzanie IP - kod nie 2xx."
 code_check_ip_retry = "Sprawdzanie IP - zbyt wiele prob."
@@ -39,8 +39,9 @@ def save_curr_ip():
         else:
             if valid_ip(result.text):
                 print("= ",result.text)
+                break
             else:
-                print("zwrocono tekst niebedacy prawidlowym IP")
+                print("zwrocono tekst niebedacy prawidlowym IP. Proba {}.".format(i))
     if result is None:
         return code_check_ip_retry
     ip_list.append(result.text.strip('\n'))
