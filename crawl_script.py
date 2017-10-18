@@ -75,7 +75,7 @@ def get_url_content_retry(url, how_many_retry):
         elif (url_content is code_blocked) or (url_content is code_privoxy):
             if url_content is code_blocked:
                 print("{}. "
-                      "Zmieniam IP po raz {}...".format(code_blocked,i))
+                      "Zmieniam IP po raz {}...".format(code_blocked, i))
             if url_content is code_privoxy:
                 print("{}".format(code_privoxy))
                 tor_ip.reset_privoxy_tor()
@@ -169,6 +169,7 @@ def get_all_atms_data_rec(st_p, end_p):
     :param end_p: region id (from region_urls) to which downloading is continued
     :return: None
     """
+    count_download = 0
     count = 0
 
     def check_change_ip(cou, req_limit, uniq_ips):
@@ -184,26 +185,26 @@ def get_all_atms_data_rec(st_p, end_p):
         elif i >= end_p:
             break
         print("Pobieranie dla: wojew_{} = {}".format(i, region_urls[i][46:]))
-        result_file_output(st_p, i, j, k, code_stopped)
+        result_file_output(st_p, i, j, k, count_download, code_stopped)
         count += 1
         check_change_ip(count, requests_limit, unique_ips)
         region_cities = get_region_cities(region_urls[i])
         if region_cities in (
                 code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
-            return result_file_output(st_p, i, j, k, region_cities)
+            return result_file_output(st_p, i, j, k, count_download, region_cities)
         time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
         for j in range(len(region_cities)):
             if j < st_p[1] and i == st_p[0]:
                 continue
             print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}"
                   .format(i, region_urls[i][46:], j, region_cities[j]))
-            result_file_output(st_p, i, j, k, code_stopped)
+            result_file_output(st_p, i, j, k, count_download, code_stopped)
             count += 1
             check_change_ip(count, requests_limit, unique_ips)
             city_atms_numbers = get_city_atms_numbers(base_city_url + region_cities[j])
             if city_atms_numbers in (
                     code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
-                return result_file_output(st_p, i, j, k, city_atms_numbers)
+                return result_file_output(st_p, i, j, k, count_download, city_atms_numbers)
             time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
             for k in range(len(city_atms_numbers)):
                 if k < st_p[2] and j == st_p[1]:
@@ -212,35 +213,37 @@ def get_all_atms_data_rec(st_p, end_p):
                       .format(i, region_urls[i][46:], j, region_cities[j], k, city_atms_numbers[k]))
                 count += 1
                 check_change_ip(count, requests_limit, unique_ips)
-                result_file_output(st_p, i, j, k, code_stopped)
+                result_file_output(st_p, i, j, k, count_download, code_stopped)
                 atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
                 if atm_data in (
                         code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
                         code_privoxy):
-                    return result_file_output(st_p, i, j, k, atm_data)
+                    return result_file_output(st_p, i, j, k, count_download, atm_data)
                 with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
                     for x in range(len(atm_data)):
                         atms_data_file.write(atm_data[x])
                         if x != len(atm_data) - 1:
                             atms_data_file.write("|")
                     atms_data_file.write("\n")
+                count_download += 1
                 time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
-    return result_file_output(st_p, i, j, k, code_succ)
+    return result_file_output(st_p, i, j, k, count_download, code_succ)
 
 
-def result_file_output(st_p, i, j, k, code):
+def result_file_output(st_p, i, j, k, data_count, code):
     if i < st_p[0]:
         i = st_p[0]
     if j < st_p[1] and i == st_p[0]:
         j = st_p[1]
     if k < st_p[2] and i == st_p[0] and j == st_p[1]:
         k = st_p[2]
-    if result_file_output.counter>0:
+    if result_file_output.counter > 0:
         trunc_lines("punkty_kontrolne")
     with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
-        output = '{}. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(code,
-                                                                                                       st_p[0], st_p[1],
-                                                                                                       st_p[2], i, j, k)
+        output = '{}. Pobrano dane w liczbie {} od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
+            code, data_count,
+            st_p[0], st_p[1],
+            st_p[2], i, j, k)
         if code in (code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
             sound_notif(0)
             print(output)
@@ -258,7 +261,7 @@ def trunc_lines(filename):
         result_file.writelines(lines)
 
 
-result_file_output.counter=0
+result_file_output.counter = 0
 print("""Program pobiera dane bankomatow ze strony karty.pl. Nalezy podac punkt startowy w postaci:
 a,b,c
 ,gdzie 'a,b,c' to liczby oznaczajace indeks wojewodztwa(a), miasta(b) i bankomatu(c), 
@@ -303,13 +306,13 @@ while 1:
             str_st = last_line_elems[-4:-1]
             try:
                 st = (int(str_st[0]), int(str_st[1]), int(str_st[2]))
-                end = 15 #int(st[0]) + 1
+                end = 15  # int(st[0]) + 1
                 get_all_atms_data_rec(st, end)
             except IndexError:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        end = 15 #int(st[0]) + 1
+        end = 15  # int(st[0]) + 1
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
         except:

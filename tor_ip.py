@@ -5,30 +5,42 @@ from stem.control import Controller
 import requests
 import win32serviceutil
 import ipgetter
+import socket
 
 ip_list = []
-check_ip_timeout = 2
-retry = 15
+check_ip_timeout = 5
+retry = 100
 code_check_ip_blocked = "Sprawdzanie IP - kod nie 2xx."
 code_check_ip_retry = "Sprawdzanie IP - zbyt wiele prob."
 
 
+def valid_ip(address):
+    try:
+        socket.inet_aton(address)
+        return True
+    except:
+        return False
+
+
 def save_curr_ip():
-    result = None
     for i in range(retry):
-        print("Sprawdzam IP = ",end='')
-        result = get_url(random.choice(ipgetter.IPgetter().server_list), check_ip_timeout)
+        result = None
+        print("Sprawdzam IP... ",end='')
         try:
-            print(result.text)
-        except AttributeError:
-            print("Sprawdzanie IP - null")
+            result = get_url(random.choice(ipgetter.IPgetter().server_list), check_ip_timeout)
+        except socket.timeout:
+            print("Socket timeout. Proba {}".format(i))
+            continue
         if result is None:
             print("Przekroczono limit {}s oczekiwania na sprawdzenie IP. "
-                  "Sprawdzam IP po raz {}".format(check_ip_timeout, i))
-        elif 200 <= result.status_code <= 299:
-            break
+                  "Proba {}.".format(check_ip_timeout, i))
         elif not (200 <= result.status_code <= 299):
             return code_check_ip_blocked
+        else:
+            if valid_ip(result.text):
+                print("= ",result.text)
+            else:
+                print("zwrocono tekst niebedacy prawidlowym IP")
     if result is None:
         return code_check_ip_retry
     ip_list.append(result.text.strip('\n'))
