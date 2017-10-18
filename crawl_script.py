@@ -25,23 +25,79 @@ region_urls = (base_region_url + "dolnoslaskie",
                base_region_url + "wielkopolskie",
                base_region_url + "zachodniopomorskie")
 
-driver_path = "C:/phantomjs-2.1.1-windows/bin/phantomjs"
-sleep_min = 100
-sleep_max = 200
+sleep_min = 10
+sleep_max = 30
 sleep_coeff = 0.01
-requests_limit = 49
-unique_ips = 20
+
+requests_limit = 66
+unique_ips = 8
+retry_count = 100
+timeout = 8
+
+code_stopped = "Zatrzymano program"
+code_blocked = "Zablokowano IP"
+code_retry = "Zbyt wiele prób zmiany IP"
+code_succ = "Zakończono pobieranie"
+code_privoxy = "Blad privoxy"
+
+
+def get_url_content(url, how_many_retry):
+    for i in range(how_many_retry):
+        print("Pobieranie url...")
+        response = tor_ip.get_url(url, timeout)
+        if response is None:
+            print("Przekroczono limit {}s oczekiwania na odpowiedz. "
+                  "Zmieniam IP po raz {}".format(timeout, i))
+            res = tor_ip.change_ip(unique_ips)
+            if res is not None:
+                return res
+        else:
+            break
+    if response is None:
+        return code_retry
+    else:
+        response.encoding = 'utf-8'
+        html = response.text
+        soup = bs4.BeautifulSoup(html, "html.parser")
+        print(soup.find('title').get_text())
+        if soup.find('title', string=re.compile("Privox", flags=re.IGNORECASE)):
+            return code_privoxy
+        if soup.find('title', string=re.compile("unavailable", flags=re.IGNORECASE)):
+            return code_blocked
+        return soup
+
+
+def get_url_content_retry(url, how_many_retry):
+    for i in range(retry_count):
+        url_content = get_url_content(url, retry_count)
+        if url_content in (tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry, code_privoxy):
+            return url_content
+        elif url_content is code_blocked or code_privoxy:
+            if url_content is code_blocked:
+                print("{}. "
+                      "Zmieniam IP po raz {}".format(code_blocked,i))
+            if url_content is code_privoxy:
+                print("{}. "
+                      "Zmieniam IP po raz {}".format(code_privoxy,i))
+            res = tor_ip.change_ip(unique_ips)
+            if res is not None:
+                return res
+            continue
+        # elif url_content is code_privoxy:
+        #     return url_content
+        else:
+            break
+    return url_content
 
 
 def get_region_cities(region_url):
     region_cities = []
     # prepare html data from url
-    response = tor_ip.get_url(region_url)
-    html = response.text
-    soup = bs4.BeautifulSoup(html, "html.parser")
-    if soup.find('title', string="503 Service Unavailable"):
-        return None
-    content = soup.find_all('ul')[-1] \
+    url_content = get_url_content_retry(region_url, retry_count)
+    if url_content in (
+            tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry, code_blocked, code_privoxy):
+        return url_content
+    content = url_content.find_all('ul')[-1] \
         .find_all(href=re.compile("miejscowosc"))
     for element in content:
         region_cities.append(element.get('href')[26:])
@@ -51,12 +107,11 @@ def get_region_cities(region_url):
 def get_city_atms_numbers(city_url):
     city_atms_numbers = []
     # prepare html data from url
-    response = tor_ip.get_url(city_url)
-    html = response.text
-    soup = bs4.BeautifulSoup(html, "html.parser")
-    if soup.find('title', string="503 Service Unavailable"):
-        return None
-    content = soup.find_all('dd')
+    url_content = get_url_content_retry(city_url, retry_count)
+    if url_content in (
+            tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry, code_blocked, code_privoxy):
+        return url_content
+    content = url_content.find_all('dd')
     for element in content:
         city_atms_numbers.append(element.find('a').get('href')[10:])
     return city_atms_numbers
@@ -65,16 +120,13 @@ def get_city_atms_numbers(city_url):
 def get_atm_data(atm_url, region_id):
     atm_data = []
     # prepare html data from url
-    response = tor_ip.get_url(atm_url)
-    response.encoding = 'utf-8'
-    html = response.text
-    soup = bs4.BeautifulSoup(html, "html.parser")
-    if soup.find('title', string="503 Service Unavailable"):
-        return None
-
+    url_content = get_url_content_retry(atm_url, retry_count)
+    if url_content in (
+            tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry, code_blocked, code_privoxy):
+        return url_content
     # get atm's data from url
-    content = soup.find_all('dd')
-    content_ids = soup.find_all('dt')
+    content = url_content.find_all('dd')
+    content_ids = url_content.find_all('dt')
     ids_strings = []
     for el in content_ids:
         ids_strings.append(el.get_text())
@@ -121,41 +173,50 @@ def get_all_atms_data_rec(st_p, end_p):
     def check_change_ip(cou, req_limit, uniq_ips):
         if cou > req_limit:
             tor_ip.change_ip(uniq_ips)
+            nonlocal count
+            count = 0
 
     i, j, k = 0, 0, 0
     for i in range(len(region_urls)):
-        count+=1
-        check_change_ip(count, requests_limit, unique_ips)
         if i < st_p[0]:
             continue
         elif i >= end_p:
             break
         print("Pobieranie dla: wojew_{} = {}".format(i, region_urls[i][46:]))
+        result_file_output(st_p, i, j, k, code_stopped)
+        count += 1
+        check_change_ip(count, requests_limit, unique_ips)
         region_cities = get_region_cities(region_urls[i])
-        if region_cities is None:
-            return result_file_output(st_p, i, j, k, True)
+        if region_cities in (
+                code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
+            return result_file_output(st_p, i, j, k, region_cities)
         time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
         for j in range(len(region_cities)):
-            count += 1
-            check_change_ip(count, requests_limit, unique_ips)
             if j < st_p[1] and i == st_p[0]:
                 continue
             print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}"
                   .format(i, region_urls[i][46:], j, region_cities[j]))
+            result_file_output(st_p, i, j, k, code_stopped)
+            count += 1
+            check_change_ip(count, requests_limit, unique_ips)
             city_atms_numbers = get_city_atms_numbers(base_city_url + region_cities[j])
-            if city_atms_numbers is None:
-                return result_file_output(st_p, i, j, k, True)
+            if city_atms_numbers in (
+                    code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
+                return result_file_output(st_p, i, j, k, city_atms_numbers)
             time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
             for k in range(len(city_atms_numbers)):
-                count += 1
-                check_change_ip(count, requests_limit, unique_ips)
                 if k < st_p[2] and j == st_p[1]:
                     continue
                 print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}\t| nr_bankom_{} = {}"
                       .format(i, region_urls[i][46:], j, region_cities[j], k, city_atms_numbers[k]))
+                count += 1
+                check_change_ip(count, requests_limit, unique_ips)
+                result_file_output(st_p, i, j, k, code_stopped)
                 atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
-                if atm_data is None:
-                    return result_file_output(st_p, i, j, k, True)
+                if atm_data in (
+                        code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
+                        code_privoxy):
+                    return result_file_output(st_p, i, j, k, atm_data)
                 with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
                     for x in range(len(atm_data)):
                         atms_data_file.write(atm_data[x])
@@ -163,34 +224,40 @@ def get_all_atms_data_rec(st_p, end_p):
                             atms_data_file.write("|")
                     atms_data_file.write("\n")
                 time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
-    return result_file_output(st_p, i, j, k, False)
+    return result_file_output(st_p, i, j, k, code_succ)
 
 
-def result_file_output(st_p, i, j, k, user_blocked):
+def result_file_output(st_p, i, j, k, code):
     if i < st_p[0]:
         i = st_p[0]
     if j < st_p[1] and i == st_p[0]:
         j = st_p[1]
-    if k < st_p[2] and i == st_p[0]:
+    if k < st_p[2] and i == st_p[0] and j == st_p[1]:
         k = st_p[2]
+    if result_file_output.counter>0:
+        trunc_lines("punkty_kontrolne")
     with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
-        if user_blocked:
-            output = 'Zablokowano IP. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
-                st_p[0], st_p[1], st_p[2], i, j,
-                k)
+        output = '{}. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(code,
+                                                                                                       st_p[0], st_p[1],
+                                                                                                       st_p[2], i, j, k)
+        if code in (code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
             sound_notif(0)
-        else:
-            output = 'Zakonczono pobieranie. Pobrano dane od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
-                st_p[0], st_p[1], st_p[2], i,
-                j, k)
+            print(output)
+        elif code in code_succ:
             sound_notif(1)
+            print(output)
         result_file.write(output)
-        print(output)
+    result_file_output.counter += 1
 
 
-# st = starting region,city, atm. This should be the same as region,city,atm
-#      from last failed request.
-# end = end region id. Alphabetically. Example: dolnoslaskie = 0,...
+def trunc_lines(filename):
+    with open("../../{}.txt".format(filename), 'r', encoding='utf-8') as result_file:
+        lines = result_file.readlines()[:-1]
+    with open("../../{}.txt".format(filename), 'w', encoding='utf-8') as result_file:
+        result_file.writelines(lines)
+
+
+result_file_output.counter=0
 print("""Program pobiera dane bankomatow ze strony karty.pl. Nalezy podac punkt startowy w postaci:
 a,b,c
 ,gdzie 'a,b,c' to liczby oznaczajace indeks wojewodztwa(a), miasta(b) i bankomatu(c), 
@@ -229,16 +296,19 @@ while 1:
     inp = input()
     if inp == 'p':
         with open("../../punkty_kontrolne.txt", 'r') as in_file:
-            str_st = in_file.readlines()[-1].split('|')[-4:-1]
+            lines = in_file.readlines()
+            last_line = lines[-1]
+            last_line_elems = last_line.split('|')
+            str_st = last_line_elems[-4:-1]
             try:
                 st = (int(str_st[0]), int(str_st[1]), int(str_st[2]))
-                end = 15  # st[0] + 1
+                end = 15 #int(st[0]) + 1
                 get_all_atms_data_rec(st, end)
             except IndexError:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        end = 15  # int(st[0]) + 1
+        end = 15 #int(st[0]) + 1
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
         except:
