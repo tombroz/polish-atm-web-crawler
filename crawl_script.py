@@ -38,7 +38,7 @@ code_stopped = "Zatrzymano program"
 code_blocked = "Zablokowano IP"
 code_retry = "Zbyt wiele prób zmiany IP"
 code_succ = "Zakończono pobieranie"
-code_privoxy = "Blad privoxy"
+code_privoxy = "Blad privoxy. Resetuje usluge privoxy i ponownie lacze z Tor..."
 
 
 def get_url_content(url, how_many_retry):
@@ -47,7 +47,7 @@ def get_url_content(url, how_many_retry):
         response = tor_ip.get_url(url, timeout)
         if response is None:
             print("Przekroczono limit {}s oczekiwania na odpowiedz. "
-                  "Zmieniam IP po raz {}".format(timeout, i))
+                  "Zmieniam IP po raz {}...".format(timeout, i))
             res = tor_ip.change_ip(unique_ips)
             if res is not None:
                 return res
@@ -70,15 +70,16 @@ def get_url_content(url, how_many_retry):
 def get_url_content_retry(url, how_many_retry):
     for i in range(retry_count):
         url_content = get_url_content(url, retry_count)
-        if url_content in (tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry, code_privoxy):
+        if url_content in (tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_retry):
             return url_content
-        elif url_content is code_blocked or code_privoxy:
+        elif (url_content is code_blocked) or (url_content is code_privoxy):
             if url_content is code_blocked:
                 print("{}. "
-                      "Zmieniam IP po raz {}".format(code_blocked,i))
+                      "Zmieniam IP po raz {}...".format(code_blocked,i))
             if url_content is code_privoxy:
-                print("{}. "
-                      "Zmieniam IP po raz {}".format(code_privoxy,i))
+                print("{}".format(code_privoxy))
+                tor_ip.reset_privoxy_tor()
+                print("Zmieniam IP po raz {}...".format(i))
             res = tor_ip.change_ip(unique_ips)
             if res is not None:
                 return res

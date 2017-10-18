@@ -1,21 +1,23 @@
+import random
+import time
 from stem import Signal
 from stem.control import Controller
 import requests
-
+import win32serviceutil
+import ipgetter
 
 ip_list = []
-check_ip_timeout = 15
-retry = 5
+check_ip_timeout = 2
+retry = 15
 code_check_ip_blocked = "Sprawdzanie IP - kod nie 2xx."
-code_check_ip_retry = "Sprawdzanie IP - zbyt wiele prób. Sprobuj pozniej lub wydłuż czas oczekiwania i powtorzeń"
+code_check_ip_retry = "Sprawdzanie IP - zbyt wiele prob."
 
 
 def save_curr_ip():
-    # ip_list.append(ipgetter.myip())
     result = None
     for i in range(retry):
         print("Sprawdzam IP = ",end='')
-        result = get_url('http://icanhazip.com/', check_ip_timeout)
+        result = get_url(random.choice(ipgetter.IPgetter().server_list), check_ip_timeout)
         try:
             print(result.text)
         except AttributeError:
@@ -29,7 +31,7 @@ def save_curr_ip():
             return code_check_ip_blocked
     if result is None:
         return code_check_ip_retry
-    ip_list.append(result.text[:-1])
+    ip_list.append(result.text.strip('\n'))
 
 
 def set_new_ip():
@@ -81,5 +83,12 @@ def change_ip(unique_ip_count):
         if ip_list[-1] not in ip_list[:-1]:
             break
 
-# set_new_ip()
-# print(ip_list)
+
+def reset_privoxy_tor():
+    win32serviceutil.StopService('privoxy')
+    time.sleep(1)
+    win32serviceutil.StartService('privoxy')
+    time.sleep(1)
+    with Controller.from_port(port=9051) as controller:
+        controller.reconnect()
+    time.sleep(1)
