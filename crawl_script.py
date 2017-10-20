@@ -6,6 +6,7 @@ import tor_ip
 from sounds import sound_notif
 
 base_atm_url = "http://www.karty.pl/bankomaty.php?bankomat="
+base_warsaw_distr_url = "http://www.karty.pl/bankomaty.php?miejscowosc=warszawa&amp;dzielnica="#od 49 znaku
 base_city_url = "http://www.karty.pl/bankomaty.php?miejscowosc="
 base_region_url = "http://www.karty.pl/bankomaty.php?wojewodztwo="
 region_urls = (base_region_url + "dolnoslaskie",
@@ -30,9 +31,9 @@ sleep_max = 30
 sleep_coeff = 0.01
 
 requests_limit = 66
-unique_ips = 8
+unique_ips = 10
 retry_count = 100
-timeout = 8
+timeout = 6
 
 code_stopped = "Zatrzymano program"
 code_blocked = "Zablokowano IP"
@@ -91,7 +92,7 @@ def get_url_content_retry(url, how_many_retry):
     return url_content
 
 
-def get_region_cities(region_url):
+def get_region_cities(region_url,urls_offset):
     region_cities = []
     # prepare html data from url
     url_content = get_url_content_retry(region_url, retry_count)
@@ -101,7 +102,7 @@ def get_region_cities(region_url):
     content = url_content.find_all('ul')[-1] \
         .find_all(href=re.compile("miejscowosc"))
     for element in content:
-        region_cities.append(element.get('href')[26:])
+        region_cities.append(element.get('href')[urls_offset:])
     return region_cities
 
 
@@ -188,7 +189,7 @@ def get_all_atms_data_rec(st_p, end_p):
         result_file_output(st_p, i, j, k, count_download, code_stopped)
         count += 1
         check_change_ip(count, requests_limit, unique_ips)
-        region_cities = get_region_cities(region_urls[i])
+        region_cities = get_region_cities(region_urls[i],26)
         if region_cities in (
                 code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
             return result_file_output(st_p, i, j, k, count_download, region_cities)
@@ -306,13 +307,13 @@ while 1:
             str_st = last_line_elems[-4:-1]
             try:
                 st = (int(str_st[0]), int(str_st[1]), int(str_st[2]))
-                end = 15  # int(st[0]) + 1
+                end = 16  # int(st[0]) + 1
                 get_all_atms_data_rec(st, end)
             except IndexError:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        end = 15  # int(st[0]) + 1
+        end = 16  # int(st[0]) + 1
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
         except:
