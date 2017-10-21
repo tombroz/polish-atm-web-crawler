@@ -6,7 +6,9 @@ import tor_ip
 from sounds import sound_notif
 
 base_atm_url = "http://www.karty.pl/bankomaty.php?bankomat="
-base_warsaw_distr_url = "http://www.karty.pl/bankomaty.php?miejscowosc=warszawa&amp;dzielnica="#od 49 znaku
+# tego ponizej uzywac w requestowaniu linku:
+base_warsaw_distr_url = "http://www.karty.pl/bankomaty.php?miejscowosc=warszawa&dzielnica="
+# a tego w htmlu: "/bankomaty.php?miejscowosc=warszawa&amp;dzielnica="  # od 45 znaku
 base_city_url = "http://www.karty.pl/bankomaty.php?miejscowosc="
 base_region_url = "http://www.karty.pl/bankomaty.php?wojewodztwo="
 region_urls = (base_region_url + "dolnoslaskie",
@@ -92,8 +94,8 @@ def get_url_content_retry(url, how_many_retry):
     return url_content
 
 
-def get_region_cities(region_url,urls_offset):
-    region_cities = []
+def get_region_subregions(region_url, urls_offset):
+    region_subregs = []
     # prepare html data from url
     url_content = get_url_content_retry(region_url, retry_count)
     if url_content in (
@@ -102,8 +104,8 @@ def get_region_cities(region_url,urls_offset):
     content = url_content.find_all('ul')[-1] \
         .find_all(href=re.compile("miejscowosc"))
     for element in content:
-        region_cities.append(element.get('href')[urls_offset:])
-    return region_cities
+        region_subregs.append(element.get('href')[urls_offset:])
+    return region_subregs
 
 
 def get_city_atms_numbers(city_url):
@@ -160,91 +162,142 @@ def get_atm_data(atm_url, region_id):
     return atm_data
 
 
-def get_all_atms_data_rec(st_p, end_p):
+def get_all_atms_data_rec(st_p, end_region):
     """
     Downloads atms data from karty.pl from starting region, city, atm_nr
     until given region (end_point) is reached.
     Writes real start and end points ((region, city, atm_nr) ids) to file
     :param st_p: tuple containing (region, city, atm_nr) ids from which
     to start downloading data
-    :param end_p: region id (from region_urls) to which downloading is continued
+    :param end_region: region id (from region_urls) to which downloading is continued
     :return: None
     """
     count_download = 0
     count = 0
 
-    def check_change_ip(cou, req_limit, uniq_ips):
-        if cou > req_limit:
+    def save_atm_data(atm_dat):
+        with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
+            for x in range(len(atm_dat)):
+                atms_data_file.write(atm_dat[x])
+                if x != len(atm_dat) - 1:
+                    atms_data_file.write("|")
+            atms_data_file.write("\n")
+        nonlocal count_download
+        count_download += 1
+
+    def check_change_ip(req_limit, uniq_ips):
+        nonlocal count
+        count += 1
+        if count > req_limit:
             tor_ip.change_ip(uniq_ips)
-            nonlocal count
             count = 0
 
-    i, j, k = 0, 0, 0
+    i, j, k, l = 0, 0, 0, -1
     for i in range(len(region_urls)):
         if i < st_p[0]:
             continue
-        elif i >= end_p:
+        elif i >= end_region:
             break
-        print("Pobieranie dla: wojew_{} = {}".format(i, region_urls[i][46:]))
-        result_file_output(st_p, i, j, k, count_download, code_stopped)
-        count += 1
-        check_change_ip(count, requests_limit, unique_ips)
-        region_cities = get_region_cities(region_urls[i],26)
+        print("Pobieranie ({}) dla: wojew_{} = {}".format(count_download, i, region_urls[i][46:]))
+        result_file_output(count_download, code_stopped, st_p, i, j, k, l)
+        check_change_ip(requests_limit, unique_ips)
+        region_cities = get_region_subregions(region_urls[i], 26)
         if region_cities in (
                 code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
-            return result_file_output(st_p, i, j, k, count_download, region_cities)
+            return result_file_output(count_download, region_cities, st_p, i, j, k, l)
         time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
         for j in range(len(region_cities)):
             if j < st_p[1] and i == st_p[0]:
                 continue
-            print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}"
-                  .format(i, region_urls[i][46:], j, region_cities[j]))
-            result_file_output(st_p, i, j, k, count_download, code_stopped)
-            count += 1
-            check_change_ip(count, requests_limit, unique_ips)
-            city_atms_numbers = get_city_atms_numbers(base_city_url + region_cities[j])
-            if city_atms_numbers in (
-                    code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
-                return result_file_output(st_p, i, j, k, count_download, city_atms_numbers)
-            time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
-            for k in range(len(city_atms_numbers)):
-                if k < st_p[2] and j == st_p[1]:
-                    continue
-                print("Pobieranie dla: wojew_{} = {}\t| miasto_{} = {}\t| nr_bankom_{} = {}"
-                      .format(i, region_urls[i][46:], j, region_cities[j], k, city_atms_numbers[k]))
-                count += 1
-                check_change_ip(count, requests_limit, unique_ips)
-                result_file_output(st_p, i, j, k, count_download, code_stopped)
-                atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
-                if atm_data in (
+            print("Pobieranie ({}): wojew_{} = {}\t| miasto_{} = {}"
+                  .format(count_download, i, region_urls[i][46:], j, region_cities[j]))
+            result_file_output(count_download, code_stopped, st_p, i, j, k, l)
+            check_change_ip(requests_limit, unique_ips)
+            if region_cities[j] != "warszawa":
+                l=-1
+                city_atms_numbers = get_city_atms_numbers(base_city_url + region_cities[j])
+                if city_atms_numbers in (
                         code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
                         code_privoxy):
-                    return result_file_output(st_p, i, j, k, count_download, atm_data)
-                with open("../../bankomaty_dane.txt", 'a', encoding='utf-8') as atms_data_file:
-                    for x in range(len(atm_data)):
-                        atms_data_file.write(atm_data[x])
-                        if x != len(atm_data) - 1:
-                            atms_data_file.write("|")
-                    atms_data_file.write("\n")
-                count_download += 1
+                    return result_file_output(count_download, city_atms_numbers, st_p, i, j, k, l)
                 time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
-    return result_file_output(st_p, i, j, k, count_download, code_succ)
+                for k in range(len(city_atms_numbers)):
+                    if k < st_p[2] and j == st_p[1]:
+                        continue
+                    print("Pobieranie ({}): wojew_{} = {}\t| miasto_{} = {}\t| nr_bankom_{} = {}"
+                          .format(count_download, i, region_urls[i][46:], j, region_cities[j], k, city_atms_numbers[k]))
+                    result_file_output(count_download, code_stopped, st_p, i, j, k, l)
+                    check_change_ip(requests_limit, unique_ips)
+                    atm_data = get_atm_data(base_atm_url + city_atms_numbers[k], i)
+                    if atm_data in (
+                            code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
+                            code_privoxy):
+                        return result_file_output(count_download, atm_data, st_p, i, j, k, l)
+                    save_atm_data(atm_data)
+                    time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
+            else:
+                l = 0
+                city_districts = get_region_subregions(base_city_url + region_cities[j], 45)
+                if city_districts in (
+                        code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
+                        code_privoxy):
+                    return result_file_output(count_download, city_districts, st_p, i, j, k, l)
+                time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
+                for k in range(len(city_districts)):
+                    if k < st_p[2] and j == st_p[1]:
+                        continue
+                    print("Pobieranie ({}): wojew_{} = {}\t| miasto_{} = {}\t| dzielnica_{} = {}"
+                          .format(count_download, i, region_urls[i][46:], j, region_cities[j], k, city_districts[k]))
+                    result_file_output(count_download, code_stopped, st_p, i, j, k, l)
+                    check_change_ip(requests_limit, unique_ips)
+                    district_atms_numbers = get_city_atms_numbers(base_warsaw_distr_url + city_districts[k])
+                    if district_atms_numbers in (
+                            code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
+                            code_privoxy):
+                        return result_file_output(count_download, district_atms_numbers, st_p, i, j, k, l)
+                    time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
+                    for l in range(len(district_atms_numbers)):
+                        if l < st_p[3] and k == st_p[2]:
+                            continue
+                        print(
+                            "Pobieranie ({}): wojew_{} = {}\t| miasto_{} = {}\t| dzielnica_{} = {}\t| nr_bankom_{} = {}"
+                            .format(count_download, i, region_urls[i][46:], j, region_cities[j], k, city_districts[k],
+                                    l, district_atms_numbers[l]))
+                        result_file_output(count_download, code_stopped, st_p, i, j, k, l)
+                        check_change_ip(requests_limit, unique_ips)
+                        atm_data = get_atm_data(base_atm_url + district_atms_numbers[l], i)
+                        if atm_data in (
+                                code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry,
+                                code_privoxy):
+                            return result_file_output(count_download, atm_data, st_p, i, j, k, l)
+                        save_atm_data(atm_data)
+                        time.sleep(float(random.randint(sleep_min, sleep_max)) * sleep_coeff)
+    return result_file_output(count_download, code_succ, st_p, i, j, k, l)
 
 
-def result_file_output(st_p, i, j, k, data_count, code):
+def result_file_output(data_count, code, st_p, i,j,k,l):
     if i < st_p[0]:
         i = st_p[0]
     if j < st_p[1] and i == st_p[0]:
         j = st_p[1]
     if k < st_p[2] and i == st_p[0] and j == st_p[1]:
         k = st_p[2]
+    if st_p[3] != -1:
+        if l < st_p[3] and i == st_p[0] and j == st_p[1] and k == st_p[2]:
+            l = st_p[3]
     if result_file_output.counter > 0:
         trunc_lines("punkty_kontrolne")
     with open("../../punkty_kontrolne.txt", 'a', encoding='utf-8') as result_file:
-        output = '{}. Pobrano dane w liczbie {} od/do: (wojew|miasto|nr_bankom) = |{}|{}|{}| / |{}|{}|{}|\n'.format(
-            code, data_count,
-            st_p[0], st_p[1],
-            st_p[2], i, j, k)
+        if st_p[3] == -1:
+            output = '{}. Pobrano dane w liczbie {} od/do: (wojew|miasto|nr_bankom|...) = |{}|{}|{}|{}| / |{}|{}|{}|{}|\n'.format(
+                code, data_count,
+                st_p[0], st_p[1],
+                st_p[2], st_p[3], i, j, k, l)
+        else:
+            output = '{}. Pobrano dane w liczbie {} od/do: (wojew|miasto|dzielnica|nr_bankom) = |{}|{}|{}|{}| / |{}|{}|{}|{}|\n'.format(
+                code, data_count,
+                st_p[0], st_p[1],
+                st_p[2], st_p[3], i, j, k, l)
         if code in (code_blocked, code_retry, tor_ip.code_check_ip_blocked, tor_ip.code_check_ip_retry, code_privoxy):
             sound_notif(0)
             print(output)
@@ -304,17 +357,17 @@ while 1:
             lines = in_file.readlines()
             last_line = lines[-1]
             last_line_elems = last_line.split('|')
-            str_st = last_line_elems[-4:-1]
+            str_st = last_line_elems[-5:-1]
             try:
-                st = (int(str_st[0]), int(str_st[1]), int(str_st[2]))
-                end = 16  # int(st[0]) + 1
-                get_all_atms_data_rec(st, end)
+                st = (int(str_st[0]), int(str_st[1]), int(str_st[2]), int(str_st[3]))
+                end_reg = 16  # int(st[0]) + 1
+                get_all_atms_data_rec(st, end_reg)
             except IndexError:
                 print("Nie odczytano punktu startowego z pliku punkty_kontrolne.txt.")
     else:
         st = inp.split(',')
-        end = 16  # int(st[0]) + 1
+        end_reg = 16  # int(st[0]) + 1
         try:
-            get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2])), end)
-        except:
+            get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2]), int(st[3])), end_reg)
+        except IndexError:
             print("Nieprawidlowe dane. Wpisz 3 liczby oddzielone przecinkami.")

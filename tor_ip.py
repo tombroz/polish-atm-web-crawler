@@ -10,8 +10,8 @@ import win32serviceutil
 import socket
 
 ip_list = []
-check_ip_timeout = 2
-retry = 150
+check_ip_timeout = 3
+retry = 300
 code_check_ip_blocked = "Sprawdzanie IP - kod nie 2xx."
 code_check_ip_retry = "Sprawdzanie IP - zbyt wiele prob."
 my_servers = [
