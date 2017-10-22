@@ -1,12 +1,10 @@
 import random
 import re
-import time
 import bs4
 import urllib3
 from stem import Signal
 from stem.control import Controller
 import requests
-import win32serviceutil
 import socket
 
 ip_list = []
@@ -208,13 +206,3 @@ def change_ip(unique_ip_count):
             return res
         if ip_list[-1] not in ip_list[:-1]:
             break
-
-
-def reset_privoxy_tor():
-    win32serviceutil.StopService('privoxy')
-    time.sleep(1)
-    win32serviceutil.StartService('privoxy')
-    time.sleep(1)
-    with Controller.from_port(port=9051) as controller:
-        controller.reconnect()
-    time.sleep(1)

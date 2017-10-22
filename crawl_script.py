@@ -81,7 +81,6 @@ def get_url_content_retry(url, how_many_retry):
                       "Zmieniam IP po raz {}...".format(code_blocked, i))
             if url_content is code_privoxy:
                 print("{}".format(code_privoxy))
-                tor_ip.reset_privoxy_tor()
                 print("Zmieniam IP po raz {}...".format(i))
             res = tor_ip.change_ip(unique_ips)
             if res is not None:
@@ -317,9 +316,11 @@ def trunc_lines(filename):
 
 result_file_output.counter = 0
 print("""Program pobiera dane bankomatow ze strony karty.pl. Nalezy podac punkt startowy w postaci:
-a,b,c
+a,b,c,d
 ,gdzie 'a,b,c' to liczby oznaczajace indeks wojewodztwa(a), miasta(b) i bankomatu(c), 
-od ktorego ma sie rozpoczac pobieranie danych. Indeksy wojewodztw sa podane alfabetycznie tj.:
+od ktorego ma sie rozpoczac pobieranie danych. 'd' to indeks używany dla warszawy, ktora ma inna strukture
+(wojew|miasto|dzielnica|nr_bankomatu). Nalezy podac jakokolwiek liczbe, jesli to nie warszawa.
+ Indeksy wojewodztw sa podane alfabetycznie tj.:
 
 0	dolnoslaskie
 1	kujawsko-pomorskie
@@ -340,7 +341,8 @@ od ktorego ma sie rozpoczac pobieranie danych. Indeksy wojewodztw sa podane alfa
 
 Indeksy miast i bankomatow nie sa z gory znane i program musi pobierac je na biezaco ze strony.
 Lepiej zostawic je na 0,0 dopoki nie uzyska sie punktu kontrolnego (patrz dalej).
-    Przykladowo rozpoczecie od poczatku wojewodztwa dolnoslaskiego to podanie: 0,0,0
+    Przykladowo rozpoczecie od poczatku wojewodztwa dolnoslaskiego to podanie: 0,0,0,-1 (ostatnia liczba
+jest pomijana jeśli nie zaczyna sie pobierania od warszawy).
 Program pobiera dane dla wojewodztw dopoki nie zostanie zablokowane IP, co jest sygnalizowane dzwiekowo. 
 Wtedy nalezy zmienic IP poza programem. Następnie mozna wpisac "p" co spowoduje kontynuowanie
 pobierania od miejsca przerwania.
@@ -349,7 +351,7 @@ wojewodztwo|miasto|lokalizacja|wlasciciel|dostepnosc|nr_bankomatu|funkcje_depozy
 W pliku "punkty_kontrolne.txt" znajduja sie punkty w ktorych zaczynalo i konczylo sie pobieranie.
 """)
 while 1:
-    print('Podaj po przecinku startowe: wojewodztwo(0-15), miasto(liczba), bankomat(liczba). '
+    print('Podaj po przecinku 4 liczby startowe: wojewodztwo(0-15), miasto(liczba), {dzielnica - dla warszawy}, bankomat(liczba). '
           'Wpisz "p", aby zaczac od miejsca gdzie skonczono:')
     inp = input()
     if inp == 'p':
@@ -370,4 +372,4 @@ while 1:
         try:
             get_all_atms_data_rec((int(st[0]), int(st[1]), int(st[2]), int(st[3])), end_reg)
         except IndexError:
-            print("Nieprawidlowe dane. Wpisz 3 liczby oddzielone przecinkami.")
+            print("Nieprawidlowe dane. Wpisz 4 liczby oddzielone przecinkami.")
