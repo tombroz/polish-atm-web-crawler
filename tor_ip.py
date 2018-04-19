@@ -161,7 +161,7 @@ def save_curr_ip():
 def set_new_ip():
     """Change IP using TOR"""
     with Controller.from_port(port=9051) as controller:
-        controller.authenticate(password='brzoza11')
+        controller.authenticate(password='1234')
         controller.signal(Signal.NEWNYM)
     res = save_curr_ip()
     return res
