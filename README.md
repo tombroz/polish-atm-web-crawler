@@ -14,4 +14,4 @@ Interface:
 
 <h1>Usage</h2>
 
-Run from commandline: <p><code>python crawl_script.py</code></p>
+Run from commandline in main project directory: <p><code>python crawl_script.py</code></p>
