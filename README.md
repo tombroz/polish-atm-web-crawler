@@ -11,4 +11,4 @@ Prerequisites:
 
 <h1>Usage</h2>
 
-Run from commandline <code>python run_script.py</code>
+Run from commandline <code>python crawl_script.py</code>
