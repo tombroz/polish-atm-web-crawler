@@ -2,6 +2,6 @@
 .idea/
 
 ### environment ###
-.cenv/
-.env/
-.venv/
+env/
+venv/
+cenv/
