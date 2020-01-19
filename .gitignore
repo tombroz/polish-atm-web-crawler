@@ -1,1 +1,7 @@
-*.pyc
+### PyCharm ###
+.idea/
+
+### environment ###
+.cenv/
+.env/
+.venv/
